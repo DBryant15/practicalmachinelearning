@@ -1,21 +1,34 @@
 ---
 title: "Practical Machine Learning Course Project"
 author: "Derek Bryant"
-date: "December 5, 2018"
+date: "February 26, 2019"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 ```
 
-## R Markdown
+```{r dependances, include=FALSE}
+#Libraries and set seed--------------------------------------------
+library("sqldf")
+library("caret")
+set.seed(102369)
+library(tidyverse) 
+library(rpart)
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+#Setup the parallel processing stuff-----------------------------
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+```
+## Introduction
 
-This was just a quick edit to the default for the purposes of posting. Blah.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+The basic goal of the project was to predit the manner in which the exercise was
+done. Provided was a dataset with 20 cases and a larger dataset from which 
+models were built. 
 
 ```{r cars}
 summary(cars)
