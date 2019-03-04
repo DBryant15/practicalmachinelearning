@@ -1,7 +1,7 @@
 ---
 title: "Practical Machine Learning Course Project"
 author: "Derek Bryant"
-date: "February 26, 2019"
+date: "March 3, 2019"
 output: html_document
 ---
 
@@ -24,22 +24,160 @@ library(doParallel)
 cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
 registerDoParallel(cluster)
 ```
+
 ## Introduction
 
 The basic goal of the project was to predit the manner in which the exercise was
-done. Provided was a dataset with 20 cases and a larger dataset from which 
-models were built. 
+done in a set of 20 cases. Provided was a dataset with 20 cases and a larger 
+dataset from which models were developed. 
 
-```{r cars}
-summary(cars)
+Not all code ran is shown as indicated in the assignment there is security 
+concerns with doing so. 
+
+## Acquire and clean data
+The steps taken to clean the data included the omission of the omission of 
+variables that summerized or aggrated parameters from the devices. 
+
+There were two data sets loaded from downloaded data: A set to build the model 
+with and twenty cases to use to test the method. The model building set was 
+split into two to create a testing and validation set. 
+
+
+```{r Aquire_Clean, include = FALSE}
+#Data was stored locally 
+#testing_set contains data from which the classe will be predicted. 
+testing_set <- read.csv(
+  file =
+    "U:/Coursera/Assignments/practicalmachinelearning/Data/pml-testing.csv",
+  stringsAsFactors = FALSE, 
+  header = TRUE)
+
+#The machine learning method was developed from the data frame training_set
+training_set <- read.csv(
+  file =
+    "U:/Coursera/Assignments/practicalmachinelearning/Data/pml-training.csv",
+  stringsAsFactors = FALSE, 
+  header = TRUE)
+
+#All summary and non-device sensor variables were removed.
+
+df_trn_RAWCLEAN <- training_set[,-c(1:7)]
+df_trn_RAWCLEAN <- select(df_trn_RAWCLEAN, -contains("var_"), 
+                      -contains("stddev_"), 
+                      -contains("max_"), 
+                      -contains("min_"), 
+                      -contains("avg_"), 
+                      -contains("total_"), 
+                      -contains("kurtosis_"), 
+                      -contains("skewness_"), 
+                      -contains("amplitude_"))
+df_trn_RAWCLEAN$classe <- as.factor(df_trn_RAWCLEAN$classe)
+
+df_tst_RAWCLEAN <- testing_set[,-c(1:7)]
+df_tst_RAWCLEAN <- select(df_tst_RAWCLEAN, -contains("var_"), 
+                          -contains("stddev_"), 
+                          -contains("max_"), 
+                          -contains("min_"), 
+                          -contains("avg_"), 
+                          -contains("total_"), 
+                          -contains("kurtosis_"), 
+                          -contains("skewness_"), 
+                          -contains("amplitude_"))
+
+#training_set was partitioned into verification and training sets. It was split
+# in half as the data set isnt really that big.
+TRAIN <- createDataPartition(df_trn_RAWCLEAN$classe, 
+                                            p=0.5, 
+                                            list = FALSE)
+training_set_TEST <- df_trn_RAWCLEAN[TRAIN,]
+training_set_VALIDATION <- df_trn_RAWCLEAN[-TRAIN,]
 ```
 
-## Including Plots
+## Model Selection and Creation 
 
-You can also embed plots, for example:
+That first model types that came to mind to predict the classe (catergory) was 
+dendrograms. In my case I started with the a method using the r package "rpart" 
+then found that a random forest would be more accurate. 
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r ModelDev, include=FALSE}
+modFit <- rpart(classe ~ ., 
+                data = training_set_TEST, 
+                method = "class")
+
+pred <- predict(modFit, 
+                training_set_VALIDATION,
+                type = "class")
+
+confMtrx <- confusionMatrix(pred, training_set_VALIDATION$classe)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r CrossValidationCode, include=FALSE} 
+Evrnmt_Param_trainControl <- trainControl(method = "cv",
+                                          number = 5,
+                                          allowParallel = TRUE)
+
+modRF <- train(classe ~ ., 
+               data = training_set_TEST, 
+               method = "rf", 
+               trControl = Evrnmt_Param_trainControl, 
+               importance = TRUE, 
+               ntree = 1000)
+
+pred_RandomForest_VALIDATION <- predict(modRF, training_set_VALIDATION)
+
+confMtrx_rf <- confusionMatrix(training_set_VALIDATION$classe, 
+                               pred_RandomForest_VALIDATION)
+```
+
+## Cross Validation
+The annotation on the second plot shows that the accuracy of the random forest 
+model was more favorable.
+```{r Accuracy}
+plot(confMtrx$table, 
+     col = confMtrx$byClass, 
+     main = paste(
+       "Confusion Matrix of Decision Tree: Accuracy =", 
+       round(confMtrx$overall["Accuracy"],2)
+     ))
+
+plot(confMtrx_rf$table, 
+     col = confMtrx$byClass, 
+     main = paste(
+       "Confusion Matrix of random forest: Accuracy =", 
+       round(confMtrx_rf$overall["Accuracy"],2)
+     ))
+
+```
+The results of the random forest follow, as does the indication that the 
+accuracy maximizes at 25 of the predictors. 
+```{r CrossValidationPlot}
+#print out modRF to see the random forest modeling result. 
+modRF
+
+plot(modRF)
+
+```
+
+## Expected out of sample error
+```{r Error}
+sample_accuracy <- postResample(pred_RandomForest_VALIDATION, 
+                                training_set_VALIDATION$classe) 
+
+sample_accuracy
+
+errorRate <- 1 - as.numeric(
+  confusionMatrix(
+    training_set_VALIDATION$classe, pred_RandomForest_VALIDATION)$overall[1]
+  ) 
+errorRate
+```
+
+## Outcome of Model using test data
+```{r Outcome} 
+predict(modRF, testing_set)
+```
+
+```{r CloseOutCleanUp, include=FALSE}
+stopCluster(cluster)
+registerDoSEQ()
+```
